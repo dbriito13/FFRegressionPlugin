@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fama-French Regression</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="regression">Regression</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </div>
+
+        <!-- Regression Tab -->
+        <div id="regression-tab" class="tab-content active">
+            <div class="section">
+                <div class="form-inline">
+                    <div class="input-group inline">
+                        <label for="ticker">Ticker:</label>
+                        <input type="text" id="ticker" placeholder="AAPL" value="AAPL">
+                    </div>
+
+                    <div class="input-group inline">
+                        <label for="period">Period:</label>
+                        <select id="period">
+                            <option value="1mo">1M</option>
+                            <option value="3mo">3M</option>
+                            <option value="6mo">6M</option>
+                            <option value="1y">1Y</option>
+                            <option value="2y">2Y</option>
+                            <option value="5y" selected>5Y</option>
+                            <option value="10y">10Y</option>
+                            <option value="20y">20Y</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group inline">
+                        <label for="region">Region:</label>
+                        <select id="region">
+                            <option value="auto" selected>Auto</option>
+                            <option value="north_america">N. America</option>
+                            <option value="developed">Developed</option>
+                            <option value="developed_ex_us">Developed ex US</option>
+                            <option value="europe">Europe</option>
+                            <option value="asia_pacific">Asia Pacific</option>
+                            <option value="japan">Japan</option>
+                        </select>
+                    </div>
+
+                    <button id="runRegressionBtn" class="btn-primary btn-compact">Run</button>
+                </div>
+
+                <div id="status" class="status"></div>
+
+                <div id="regressionResults" class="results"></div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="section">
+                <h2>Fama-French Data</h2>
+
+                <div class="settings-item">
+                    <div class="settings-label">
+                        <strong>Cache Status</strong>
+                        <p id="cacheStatus" class="settings-desc">Checking...</p>
+                    </div>
+                </div>
+
+                <div class="settings-item">
+                    <button id="downloadFFBtn" class="btn-secondary">Download All Regional Data</button>
+                    <p class="settings-hint">Downloads factor data for all regions (North America, Europe, Asia Pacific, Japan, Global)</p>
+                </div>
+
+                <div class="settings-item">
+                    <button id="clearCacheBtn" class="btn-danger">Clear Cache</button>
+                    <p class="settings-hint">Remove cached data and force re-download</p>
+                </div>
+
+                <div class="settings-item">
+                    <div class="settings-info">
+                        <p><strong>About:</strong></p>
+                        <p>This extension runs Fama-French 5-factor regression analysis on stocks using daily data from Yahoo Finance and regional factor data from Ken French's Data Library.</p>
+                        <p style="margin-top: 8px;"><strong>Factors:</strong></p>
+                        <p>MKT-RF (Market), SMB (Size), HML (Value), RMW (Profitability), CMA (Investment)</p>
+                        <p style="margin-top: 8px;"><strong>Regions:</strong></p>
+                        <p>Region is auto-detected from stock exchange. Supported: North America, Developed Markets, Developed ex US, Europe, Asia Pacific, Japan</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="jszip.min.js"></script>
+    <script src="ffDataManager.js"></script>
+    <script src="dataFetcher.js"></script>
+    <script src="famaFrenchRegression.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
