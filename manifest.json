@@ -2,9 +2,16 @@
   "manifest_version": 3,
   "name": "Fama-French Regression",
   "version": "1.0.0",
-  "description": "Run Fama-French factor regression on stocks",
+  "description": "Run Fama-French 5-factor regression on tickers. Supports automatic global factor region detection ",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
-    "storage"
+    "storage",
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "https://query1.finance.yahoo.com/*",
@@ -13,5 +20,17 @@
   ],
   "action": {
     "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "run-regression": {
+      "suggested_key": {
+        "default": "Ctrl+J",
+        "mac": "Command+J"
+      },
+      "description": "Run regression on selected ticker"
+    }
   }
 }

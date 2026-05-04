@@ -12,6 +12,24 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     let ffDataCache = {}; // Cache by region
 
+    // Check for auto-run trigger from keyboard shortcut
+    const autoRun = await chrome.storage.local.get(['autoRunTicker', 'autoRunPeriod', 'autoRunTimestamp']);
+    if (autoRun.autoRunTicker && autoRun.autoRunTimestamp) {
+        // Check if this is a recent trigger (within last 2 seconds)
+        if (Date.now() - autoRun.autoRunTimestamp < 2000) {
+            tickerInput.value = autoRun.autoRunTicker;
+            periodSelect.value = autoRun.autoRunPeriod || '20y';
+
+            // Clear the trigger so it doesn't run again
+            await chrome.storage.local.remove(['autoRunTicker', 'autoRunPeriod', 'autoRunTimestamp']);
+
+            // Auto-run the regression after a short delay to let UI update
+            setTimeout(() => {
+                runRegressionBtn.click();
+            }, 100);
+        }
+    }
+
     // Tab switching
     const tabButtons = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
@@ -30,8 +48,29 @@ document.addEventListener('DOMContentLoaded', async function() {
         });
     });
 
+    // Sub-tab switching
+    const subTabButtons = document.querySelectorAll('.sub-tab-btn');
+    const subTabContents = document.querySelectorAll('.sub-tab-content');
+
+    subTabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const subtabName = this.getAttribute('data-subtab');
+
+            // Remove active class from all buttons and contents
+            subTabButtons.forEach(btn => btn.classList.remove('active'));
+            subTabContents.forEach(content => content.classList.remove('active'));
+
+            // Add active class to clicked button and corresponding content
+            this.classList.add('active');
+            document.getElementById(`${subtabName}-subtab`).classList.add('active');
+        });
+    });
+
     // Check cache status on load
     await updateCacheStatus();
+
+    // Load current keyboard shortcut
+    await updateKeyboardShortcut();
 
     // Download FF data button (downloads all regions)
     downloadFFBtn.addEventListener('click', async function() {
@@ -39,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         const originalText = downloadFFBtn.textContent;
 
         try {
-            const regions = ['north_america', 'developed', 'developed_ex_us', 'europe', 'asia_pacific', 'japan'];
+            const regions = ['north_america', 'developed', 'developed_ex_us', 'europe', 'asia_pacific', 'japan', 'emerging'];
             let downloaded = 0;
 
             for (const region of regions) {
@@ -72,11 +111,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         alert('Cache cleared for all regions');
     });
 
+    // Open keyboard shortcuts page
+    const openShortcutsBtn = document.getElementById('openShortcutsBtn');
+    openShortcutsBtn.addEventListener('click', function() {
+        chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    });
+
     // Run regression
     runRegressionBtn.addEventListener('click', async function() {
         const ticker = tickerInput.value.trim().toUpperCase();
         const period = periodSelect.value;
         let selectedRegion = regionSelect.value;
+        const convertToUSD = document.getElementById('convertToUSD').checked;
 
         if (!ticker) {
             showStatus('Please enter a ticker symbol', 'error');
@@ -85,8 +131,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         runRegressionBtn.disabled = true;
         showStatus(`Preparing data for ${ticker}...`, 'loading');
-        regressionResultsDiv.classList.remove('show');
+
+        // Hide results section
+        document.getElementById('resultsSection').style.display = 'none';
         regressionResultsDiv.innerHTML = '';
+        document.getElementById('factorChart').innerHTML = '';
 
         try {
             // First fetch stock data to detect region if auto
@@ -95,7 +144,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             let region, regionSource;
             if (selectedRegion === 'auto') {
-                region = FFDataManager.getRegionFromTicker(stockDataPreview.ticker);
+                const metadata = {
+                    instrumentType: stockDataPreview.instrumentType,
+                    longName: stockDataPreview.longName
+                };
+                region = FFDataManager.getRegionFromTicker(stockDataPreview.ticker, metadata);
                 regionSource = 'auto-detected';
                 console.log(`Auto-detected region: ${region}`);
 
@@ -132,7 +185,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 ffDataCache[region],
                 period,
                 true, // Use 5-factor model
-                region
+                region,
+                convertToUSD
             );
 
             console.log('Prepared data:', preparedData);
@@ -140,6 +194,21 @@ document.addEventListener('DOMContentLoaded', async function() {
             if (preparedData.dataPoints === 0) {
                 throw new Error('No matching data points found. The date ranges may not overlap.');
             }
+
+            // Debug: Check data quality
+            console.log('Excess returns sample:', preparedData.excessReturns.slice(0, 5));
+            console.log('Factors sample:', preparedData.factors.slice(0, 5));
+            console.log('Excess returns stats:', {
+                min: Math.min(...preparedData.excessReturns),
+                max: Math.max(...preparedData.excessReturns),
+                mean: preparedData.excessReturns.reduce((a,b) => a+b, 0) / preparedData.excessReturns.length
+            });
+
+            // Export data for Python comparison
+            console.log('=== DATA FOR PYTHON COMPARISON ===');
+            console.log('Dates:', JSON.stringify(preparedData.dates));
+            console.log('Excess Returns:', JSON.stringify(preparedData.excessReturns));
+            console.log('Factors:', JSON.stringify(preparedData.factors));
 
             // Run 5-factor regression
             const results = FamaFrenchRegression.fiveFactorRegression(
@@ -151,6 +220,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Hide status and display results
             statusDiv.classList.remove('show');
+
+            // Show results section
+            document.getElementById('resultsSection').style.display = 'block';
 
             // Display results
             displayRegressionResults(preparedData.ticker, period, preparedData.dataPoints, preparedData.currencyNote, preparedData.region, regionSource, results);
@@ -193,6 +265,23 @@ document.addEventListener('DOMContentLoaded', async function() {
         } else {
             cacheStatusText.textContent = `⚠ ${cachedCount} region(s) cached, ${cachedCount - validCount} stale`;
             cacheStatusText.classList.remove('loaded');
+        }
+    }
+
+    async function updateKeyboardShortcut() {
+        const currentShortcutText = document.getElementById('currentShortcut');
+        try {
+            const commands = await chrome.commands.getAll();
+            const runRegressionCommand = commands.find(cmd => cmd.name === 'run-regression');
+
+            if (runRegressionCommand && runRegressionCommand.shortcut) {
+                currentShortcutText.textContent = runRegressionCommand.shortcut;
+            } else {
+                currentShortcutText.textContent = 'Not set (click below to configure)';
+            }
+        } catch (error) {
+            console.error('Error getting keyboard shortcut:', error);
+            currentShortcutText.textContent = 'Unable to load shortcut';
         }
     }
 
@@ -271,6 +360,78 @@ document.addEventListener('DOMContentLoaded', async function() {
         `;
 
         regressionResultsDiv.innerHTML = tableHTML + statsHTML + legendHTML;
-        regressionResultsDiv.classList.add('show');
+
+        // Display factor chart
+        displayFactorChart(results);
+    }
+
+    function displayFactorChart(results) {
+        const chartContainer = document.getElementById('factorChart');
+
+        // Only show factors (not alpha) for the chart
+        const factors = [
+            { name: 'Market', key: 'betaMKT', shortName: 'MKT-RF' },
+            { name: 'Size', key: 'betaSMB', shortName: 'SMB' },
+            { name: 'Value', key: 'betaHML', shortName: 'HML' },
+            { name: 'Profitability', key: 'betaRMW', shortName: 'RMW' },
+            { name: 'Investment', key: 'betaCMA', shortName: 'CMA' }
+        ];
+
+        // Find min/max for scaling
+        let minVal = 0;
+        let maxVal = 0;
+        factors.forEach(factor => {
+            const ci = results.confidenceIntervals[factor.key];
+            minVal = Math.min(minVal, ci.lower);
+            maxVal = Math.max(maxVal, ci.upper);
+        });
+
+        // Add some padding
+        const range = maxVal - minVal;
+        minVal -= range * 0.1;
+        maxVal += range * 0.1;
+
+        const totalRange = maxVal - minVal;
+
+        let chartHTML = `
+            <h3>Factor Loadings with 95% Confidence Intervals</h3>
+            <div class="chart-bars">
+        `;
+
+        factors.forEach(factor => {
+            const coef = results[factor.key];
+            const ci = results.confidenceIntervals[factor.key];
+            const sig = results.significance[factor.key];
+
+            // Calculate positions as percentages
+            const zeroPos = ((0 - minVal) / totalRange) * 100;
+            const coefPos = ((coef - minVal) / totalRange) * 100;
+            const ciLowerPos = ((ci.lower - minVal) / totalRange) * 100;
+            const ciUpperPos = ((ci.upper - minVal) / totalRange) * 100;
+            const ciWidth = ciUpperPos - ciLowerPos;
+
+            const isSignificant = sig !== '';
+            const isNegative = coef < 0;
+            const pointClass = `chart-bar-point ${isSignificant ? 'significant' : ''} ${isNegative ? 'negative' : ''}`;
+
+            chartHTML += `
+                <div class="chart-bar-row">
+                    <div class="chart-label">${factor.name} (${factor.shortName})</div>
+                    <div class="chart-bar-container">
+                        <div class="chart-zero-line" style="left: ${zeroPos}%;"></div>
+                        <div class="chart-bar-line" style="left: ${ciLowerPos}%; width: ${ciWidth}%;"></div>
+                        <div class="chart-bar-ci" style="left: ${ciLowerPos}%; width: ${ciWidth}%;"></div>
+                        <div class="${pointClass}" style="left: ${coefPos}%;"></div>
+                    </div>
+                    <div class="chart-value">${coef.toFixed(3)} ${sig}</div>
+                </div>
+            `;
+        });
+
+        chartHTML += `
+            </div>
+        `;
+
+        chartContainer.innerHTML = chartHTML;
     }
 });

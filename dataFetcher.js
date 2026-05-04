@@ -54,17 +54,28 @@ class DataFetcher {
         }
 
         const result = data.chart.result[0];
+
+        // Validate that required data exists
+        if (!result.timestamp || !result.indicators || !result.indicators.adjclose) {
+          lastError = new Error(`No price data available for ${tickerWithSuffix}`);
+          continue; // Try next suffix
+        }
+
         const timestamps = result.timestamp;
         const prices = result.indicators.adjclose[0].adjclose;
 
         // Convert timestamps to dates and filter out null prices
-        // For monthly data, normalize to first day of month (YYYY-MM-01) to match FF data
+        // For monthly data: Yahoo returns timestamps at midnight on first day of month
+        // But timezone conversion can shift the date backwards. Add 12 hours to avoid this.
         const priceData = timestamps
           .map((ts, i) => {
-            const dateObj = new Date(ts * 1000);
-            const year = dateObj.getUTCFullYear();
-            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-            const date = `${year}-${month}-01`; // Always use first day of month
+            // Add 12 hours to avoid timezone issues (43200 seconds = 12 hours)
+            const dateObj = new Date((ts + 43200) * 1000);
+            const actualDate = dateObj.toISOString().split('T')[0];
+
+            // Normalize to first day of month
+            const [y, m, d] = actualDate.split('-');
+            const date = `${y}-${m}-01`;
             return {
               date: date,
               price: prices[i]
@@ -76,6 +87,8 @@ class DataFetcher {
         return {
           ticker: tickerWithSuffix,
           currency: result.meta.currency,
+          instrumentType: result.meta.instrumentType || 'EQUITY',
+          longName: result.meta.longName || '',
           data: priceData
         };
 
@@ -333,27 +346,44 @@ class DataFetcher {
    * @param {string} period - Time period for stock data
    * @param {boolean} fiveFactor - Use 5-factor model
    * @param {string} region - Region for factor data (optional, auto-detected)
+   * @param {boolean} convertToUSD - Whether to convert foreign currencies to USD (default: true)
    * @returns {Promise<Object>} Complete regression results
    */
-  static async fetchAndPrepare(ticker, ffCSV, period = '5y', fiveFactor = false, region = null) {
+  static async fetchAndPrepare(ticker, ffCSV, period = '5y', fiveFactor = false, region = null, convertToUSD = true) {
     // Fetch stock data
     const stockData = await this.fetchYahooFinanceData(ticker, period);
 
     // Auto-detect region if not provided
     if (!region && typeof FFDataManager !== 'undefined') {
-      region = FFDataManager.getRegionFromTicker(stockData.ticker);
+      const metadata = {
+        instrumentType: stockData.instrumentType,
+        longName: stockData.longName
+      };
+      region = FFDataManager.getRegionFromTicker(stockData.ticker, metadata);
     }
 
-    // Convert to USD if needed
+    // Convert to USD if needed and requested
     let priceData = stockData.data;
     let currencyNote = '';
-    if (stockData.currency !== 'USD') {
+    if (convertToUSD && stockData.currency !== 'USD') {
       currencyNote = ` (converted from ${stockData.currency})`;
       priceData = await this.convertToUSD(stockData.data, stockData.currency, period);
+    } else if (!convertToUSD && stockData.currency !== 'USD') {
+      currencyNote = ` (${stockData.currency}, not converted)`;
     }
 
     // Calculate returns
     const returns = this.calculateReturns(priceData);
+
+    // Debug: Log prices and returns
+    console.log('=== RAW PRICES (first 10) ===');
+    priceData.slice(0, 10).forEach(item => {
+      console.log(`${item.date}: ${item.price.toFixed(4)}`);
+    });
+    console.log('=== RETURNS (first 10) ===');
+    returns.slice(0, 10).forEach(item => {
+      console.log(`${item.date}: ${item.return.toFixed(6)}`);
+    });
 
     // Parse FF data (monthly)
     const ffData = this.parseFamaFrenchCSV(ffCSV, false);

@@ -237,6 +237,48 @@ select:focus {
     display: block;
 }
 
+/* Sub-tabs */
+.sub-tabs {
+    display: flex;
+    background: #f5f5f5;
+    border-radius: 6px;
+    padding: 4px;
+    margin-bottom: 15px;
+    gap: 4px;
+}
+
+.sub-tab-btn {
+    flex: 1;
+    padding: 8px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: #666;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sub-tab-btn:hover {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.sub-tab-btn.active {
+    background: white;
+    color: #4CAF50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.sub-tab-content {
+    display: none;
+}
+
+.sub-tab-content.active {
+    display: block;
+}
+
 /* Settings page */
 .settings-item {
     margin-bottom: 20px;
@@ -342,11 +384,6 @@ select:focus {
 
 .results {
     margin-top: 12px;
-    display: none;
-}
-
-.results.show {
-    display: block;
 }
 
 .result-summary {
@@ -451,4 +488,104 @@ select:focus {
 
 .sig-legend p {
     margin: 2px 0;
+}
+
+/* Factor Chart */
+.chart-container {
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-container h3 {
+    margin: 0 0 15px 0;
+    font-size: 14px;
+    color: #333;
+}
+
+.chart-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.chart-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chart-label {
+    width: 80px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #666;
+    text-align: right;
+}
+
+.chart-bar-container {
+    flex: 1;
+    position: relative;
+    height: 30px;
+    background: #f5f5f5;
+    border-radius: 4px;
+    overflow: visible;
+}
+
+.chart-bar-line {
+    position: absolute;
+    top: 50%;
+    height: 2px;
+    background: #999;
+    transform: translateY(-1px);
+}
+
+.chart-bar-ci {
+    position: absolute;
+    top: 50%;
+    height: 8px;
+    background: rgba(33, 150, 243, 0.3);
+    border-radius: 2px;
+    transform: translateY(-4px);
+}
+
+.chart-bar-point {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    background: #2196F3;
+    border: 2px solid white;
+    border-radius: 50%;
+    transform: translate(-5px, -5px);
+    z-index: 2;
+}
+
+.chart-bar-point.significant {
+    background: #4CAF50;
+}
+
+.chart-bar-point.negative {
+    background: #f44336;
+}
+
+.chart-bar-point.negative.significant {
+    background: #d32f2f;
+}
+
+.chart-value {
+    min-width: 60px;
+    font-size: 11px;
+    color: #333;
+    text-align: left;
+}
+
+.chart-zero-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #333;
+    z-index: 1;
 }

@@ -40,7 +40,7 @@ class FamaFrenchRegression {
     // Calculate standard errors
     const mse = sse / (n - coefficients.length);
     const XtX_inv = this.matrixInverse(this.matrixMultiply(this.transpose(X), X));
-    const standardErrors = XtX_inv.map(row => Math.sqrt(mse * row[XtX_inv.indexOf(row)]));
+    const standardErrors = XtX_inv.map((row, i) => Math.sqrt(mse * row[i]));
 
     // Calculate t-statistics and p-values
     const degreesOfFreedom = n - coefficients.length;
@@ -100,7 +100,16 @@ class FamaFrenchRegression {
     const X = factors.map(row => [1, ...row]);
     const y = excessReturns;
 
+    console.log('Regression input check:', {
+      n: n,
+      X_sample: X.slice(0, 2),
+      y_sample: y.slice(0, 5),
+      X_has_NaN: X.some(row => row.some(val => isNaN(val))),
+      y_has_NaN: y.some(val => isNaN(val))
+    });
+
     const coefficients = this.olsRegression(X, y);
+    console.log('Coefficients:', coefficients);
 
     const fitted = X.map(row =>
       row.reduce((sum, val, i) => sum + val * coefficients[i], 0)
@@ -115,11 +124,22 @@ class FamaFrenchRegression {
 
     const mse = sse / (n - coefficients.length);
     const XtX_inv = this.matrixInverse(this.matrixMultiply(this.transpose(X), X));
-    const standardErrors = XtX_inv.map(row => Math.sqrt(mse * row[XtX_inv.indexOf(row)]));
+    const standardErrors = XtX_inv.map((row, i) => Math.sqrt(mse * row[i]));
 
     const degreesOfFreedom = n - coefficients.length;
     const tStats = coefficients.map((coef, i) => coef / standardErrors[i]);
     const pValues = tStats.map(t => this.tTestPValue(t, degreesOfFreedom));
+
+    // Calculate 95% confidence intervals
+    // Using z-score approximation (valid for large samples, df > 30)
+    const tCritical = 1.96; // 95% CI critical value
+    const confidenceIntervals = coefficients.map((coef, i) => {
+      const margin = tCritical * standardErrors[i];
+      return {
+        lower: coef - margin,
+        upper: coef + margin
+      };
+    });
 
     return {
       alpha: coefficients[0],
@@ -137,6 +157,14 @@ class FamaFrenchRegression {
         betaHML: standardErrors[3],
         betaRMW: standardErrors[4],
         betaCMA: standardErrors[5]
+      },
+      confidenceIntervals: {
+        alpha: confidenceIntervals[0],
+        betaMKT: confidenceIntervals[1],
+        betaSMB: confidenceIntervals[2],
+        betaHML: confidenceIntervals[3],
+        betaRMW: confidenceIntervals[4],
+        betaCMA: confidenceIntervals[5]
       },
       tStats: {
         alpha: tStats[0],

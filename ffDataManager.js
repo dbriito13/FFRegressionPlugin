@@ -11,18 +11,40 @@ class FFDataManager {
     'developed_ex_us': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Developed_ex_US_5_Factors_CSV.zip',
     'europe': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Europe_5_Factors_CSV.zip',
     'asia_pacific': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Asia_Pacific_ex_Japan_5_Factors_CSV.zip',
-    'japan': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Japan_5_Factors_CSV.zip'
+    'japan': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Japan_5_Factors_CSV.zip',
+    'emerging': 'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Emerging_5_Factors_CSV.zip'
     // Note: Using monthly data to match F4RATK default and Portfolio Visualizer
   };
 
   static CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   /**
-   * Determine region from ticker exchange suffix
+   * Determine region from ticker and metadata
    * @param {string} ticker - Ticker symbol with exchange suffix
+   * @param {Object} metadata - Optional metadata with instrumentType and longName
    * @returns {string} Region identifier
    */
-  static getRegionFromTicker(ticker) {
+  static getRegionFromTicker(ticker, metadata = null) {
+    console.log(`getRegionFromTicker called:`, { ticker, metadata });
+
+    // If metadata provided, check if it's an ETF with geographic info
+    if (metadata && metadata.instrumentType === 'ETF' && metadata.longName) {
+      console.log(`Checking ETF name: "${metadata.longName}"`);
+      const region = this.detectRegionFromName(metadata.longName);
+      if (region) {
+        console.log(`ETF detected: "${metadata.longName}" → ${region}`);
+        return region;
+      }
+      console.log(`No region keyword found in ETF name, falling back to exchange`);
+    } else {
+      console.log(`Not an ETF or missing data:`, {
+        hasMetadata: !!metadata,
+        instrumentType: metadata?.instrumentType,
+        hasLongName: !!metadata?.longName
+      });
+    }
+
+    // Fall back to exchange-based detection
     if (!ticker.includes('.')) {
       return 'north_america'; // US stocks (no suffix)
     }
@@ -61,9 +83,68 @@ class FFDataManager {
       // North America
       'TO': 'north_america', // Toronto
       'V': 'north_america',  // Vancouver
+
+      // Emerging Markets
+      'BO': 'emerging',   // Bombay (India)
+      'NS': 'emerging',   // National Stock Exchange (India)
+      'SA': 'emerging',   // São Paulo (Brazil)
+      'MX': 'emerging',   // Mexico
+      'IS': 'emerging',   // Istanbul (Turkey)
+      'TW': 'emerging',   // Taiwan
+      'BA': 'emerging',   // Buenos Aires (Argentina)
+      'SN': 'emerging',   // Santiago (Chile)
+      'JK': 'emerging',   // Jakarta (Indonesia)
+      'BK': 'emerging',   // Bangkok (Thailand)
+      'KL': 'emerging',   // Kuala Lumpur (Malaysia)
+      'AT': 'emerging',   // Athens (Greece)
+      'PR': 'emerging',   // Prague (Czech Republic)
+      'WA': 'emerging',   // Warsaw (Poland)
+      'TA': 'emerging',   // Tel Aviv (Israel)
+      'CA': 'emerging',   // Cairo (Egypt)
+      'SR': 'emerging',   // Saudi Arabia (Riyadh)
     };
 
     return exchangeToRegion[suffix] || 'developed'; // Default to developed markets if unknown
+  }
+
+  /**
+   * Detect region from fund/ETF name
+   * @param {string} name - Fund long name
+   * @returns {string|null} Region identifier or null if not detected
+   */
+  static detectRegionFromName(name) {
+    const nameLower = name.toLowerCase();
+
+    // Keywords for different regions (order matters - check most specific first)
+    if (nameLower.includes('emerging') || nameLower.includes(' em ') || nameLower.includes('msci em')) {
+      return 'emerging'; // Emerging markets (e.g., "Emerging Markets", "MSCI EM", "EM IMI")
+    }
+
+    if (nameLower.includes('world') || nameLower.includes('global') || nameLower.includes('acwi') || nameLower.includes('all-world')) {
+      return 'developed'; // World/Global/All-World funds → Developed markets
+    }
+
+    if (nameLower.includes('eafe') || nameLower.includes('international') || nameLower.includes('ex-us') || nameLower.includes('ex us')) {
+      return 'developed_ex_us'; // International/EAFE → Developed ex-US
+    }
+
+    if (nameLower.includes('europe') || nameLower.includes('stoxx')) {
+      return 'europe';
+    }
+
+    if (nameLower.includes('asia') && !nameLower.includes('japan')) {
+      return 'asia_pacific';
+    }
+
+    if (nameLower.includes('japan') || nameLower.includes('nikkei') || nameLower.includes('topix')) {
+      return 'japan';
+    }
+
+    if (nameLower.includes('s&p 500') || nameLower.includes('sp500') || nameLower.includes('russell') || nameLower.includes('dow')) {
+      return 'north_america'; // US index funds
+    }
+
+    return null; // No clear region detected
   }
 
   /**
@@ -275,7 +356,8 @@ class FFDataManager {
       'developed_ex_us': 'Developed ex US',
       'europe': 'Europe',
       'asia_pacific': 'Asia Pacific',
-      'japan': 'Japan'
+      'japan': 'Japan',
+      'emerging': 'Emerging Markets'
     };
     return names[region] || region;
   }
