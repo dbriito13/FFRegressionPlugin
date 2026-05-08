@@ -25,7 +25,6 @@ class FFDataManager {
    * @returns {string} Region identifier
    */
   static getRegionFromTicker(ticker, metadata = null) {
-    console.log(`getRegionFromTicker called:`, { ticker, metadata });
 
     // If metadata provided, check if it's an ETF with geographic info
     if (metadata && metadata.instrumentType === 'ETF' && metadata.longName) {
@@ -36,12 +35,6 @@ class FFDataManager {
         return region;
       }
       console.log(`No region keyword found in ETF name, falling back to exchange`);
-    } else {
-      console.log(`Not an ETF or missing data:`, {
-        hasMetadata: !!metadata,
-        instrumentType: metadata?.instrumentType,
-        hasLongName: !!metadata?.longName
-      });
     }
 
     // Fall back to exchange-based detection
@@ -210,7 +203,6 @@ class FFDataManager {
       // Check cache first
       const cachedData = await this.getCachedData(cacheKey, timestampKey);
       if (cachedData) {
-        console.log(`Using cached FF data for ${region}`);
         return cachedData;
       }
     }
@@ -297,8 +289,8 @@ class FFDataManager {
       const keysToRemove = [];
 
       regions.forEach(region => {
-        keysToRemove.push(`ff_5_factor_${region}`);
-        keysToRemove.push(`ff_5_factor_${region}_timestamp`);
+        keysToRemove.push(`ff_5_factor_monthly_${region}`);
+        keysToRemove.push(`ff_5_factor_monthly_${region}_timestamp`);
       });
 
       await chrome.storage.local.remove(keysToRemove);
@@ -318,8 +310,8 @@ class FFDataManager {
 
     try {
       for (const region of regions) {
-        const cacheKey = `ff_5_factor_${region}`;
-        const timestampKey = `ff_5_factor_${region}_timestamp`;
+        const cacheKey = `ff_5_factor_monthly_${region}`;
+        const timestampKey = `ff_5_factor_monthly_${region}_timestamp`;
 
         const result = await chrome.storage.local.get([cacheKey, timestampKey]);
 

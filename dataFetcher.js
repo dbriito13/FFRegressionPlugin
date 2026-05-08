@@ -140,7 +140,6 @@ class DataFetcher {
     const data = [];
 
     let dataStarted = false;
-    console.log(`Parsing FF CSV: ${lines.length} lines total`);
 
     for (const line of lines) {
       // Skip until we find the data section
@@ -217,7 +216,6 @@ class DataFetcher {
       });
     }
 
-    console.log(`Parsed FF data: ${data.length} rows, date range: ${data[0]?.date} to ${data[data.length-1]?.date}`);
     return data;
   }
 
@@ -233,10 +231,6 @@ class DataFetcher {
     ffData.forEach(item => {
       ffMap.set(item.date, item);
     });
-
-    console.log(`Aligning data: ${stockReturns.length} stock returns, ${ffData.length} FF factor days`);
-    console.log(`Stock date range: ${stockReturns[0]?.date} to ${stockReturns[stockReturns.length-1]?.date}`);
-    console.log(`FF date range: ${ffData[0]?.date} to ${ffData[ffData.length-1]?.date}`);
 
     const alignedData = [];
 
@@ -261,7 +255,6 @@ class DataFetcher {
       }
     }
 
-    console.log(`Aligned ${alignedData.length} data points`);
     return alignedData;
   }
 
@@ -294,11 +287,11 @@ class DataFetcher {
    * @param {Array<Object>} priceData - Array of {date, price}
    * @param {string} currency - Currency code (e.g., 'EUR', 'GBP')
    * @param {string} period - Time period for FX data
-   * @returns {Promise<Array<Object>>} Price data in USD
+   * @returns {Promise<Object>} {data: Array<Object>, conversionFailed: boolean}
    */
   static async convertToUSD(priceData, currency, period) {
     if (currency === 'USD') {
-      return priceData; // Already in USD
+      return { data: priceData, conversionFailed: false }; // Already in USD
     }
 
     // Map common currencies to Yahoo Finance forex symbols
@@ -330,12 +323,12 @@ class DataFetcher {
 
       console.log(`Converted ${convertedData.length} prices from ${currency} to USD`);
 
-      return convertedData;
+      return { data: convertedData, conversionFailed: false };
 
     } catch (error) {
       console.warn(`Failed to convert ${currency} to USD:`, error);
       console.warn('Proceeding with original currency - results may be less accurate');
-      return priceData; // Fall back to original currency
+      return { data: priceData, conversionFailed: true }; // Fall back to original currency
     }
   }
 
@@ -365,25 +358,23 @@ class DataFetcher {
     // Convert to USD if needed and requested
     let priceData = stockData.data;
     let currencyNote = '';
+    let conversionFailed = false;
     if (convertToUSD && stockData.currency !== 'USD') {
-      currencyNote = ` (converted from ${stockData.currency})`;
-      priceData = await this.convertToUSD(stockData.data, stockData.currency, period);
+      const conversionResult = await this.convertToUSD(stockData.data, stockData.currency, period);
+      priceData = conversionResult.data;
+      conversionFailed = conversionResult.conversionFailed;
+
+      if (conversionFailed) {
+        currencyNote = ` (${stockData.currency} - CONVERSION FAILED)`;
+      } else {
+        currencyNote = ` (converted from ${stockData.currency})`;
+      }
     } else if (!convertToUSD && stockData.currency !== 'USD') {
       currencyNote = ` (${stockData.currency}, not converted)`;
     }
 
     // Calculate returns
     const returns = this.calculateReturns(priceData);
-
-    // Debug: Log prices and returns
-    console.log('=== RAW PRICES (first 10) ===');
-    priceData.slice(0, 10).forEach(item => {
-      console.log(`${item.date}: ${item.price.toFixed(4)}`);
-    });
-    console.log('=== RETURNS (first 10) ===');
-    returns.slice(0, 10).forEach(item => {
-      console.log(`${item.date}: ${item.return.toFixed(6)}`);
-    });
 
     // Parse FF data (monthly)
     const ffData = this.parseFamaFrenchCSV(ffCSV, false);
@@ -402,6 +393,7 @@ class DataFetcher {
       region: region,
       period: period,
       dataPoints: aligned.length,
+      instrumentType: stockData.instrumentType,
       ...regressionData
     };
   }

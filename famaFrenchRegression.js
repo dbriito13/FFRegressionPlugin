@@ -100,16 +100,7 @@ class FamaFrenchRegression {
     const X = factors.map(row => [1, ...row]);
     const y = excessReturns;
 
-    console.log('Regression input check:', {
-      n: n,
-      X_sample: X.slice(0, 2),
-      y_sample: y.slice(0, 5),
-      X_has_NaN: X.some(row => row.some(val => isNaN(val))),
-      y_has_NaN: y.some(val => isNaN(val))
-    });
-
     const coefficients = this.olsRegression(X, y);
-    console.log('Coefficients:', coefficients);
 
     const fitted = X.map(row =>
       row.reduce((sum, val, i) => sum + val * coefficients[i], 0)
@@ -267,6 +258,15 @@ class FamaFrenchRegression {
       }
       [augmented[i], augmented[maxRow]] = [augmented[maxRow], augmented[i]];
 
+      // Check for singular matrix (pivot is zero or near-zero)
+      if (Math.abs(augmented[i][i]) < 1e-10) {
+        throw new Error(
+          'Singular matrix detected: Cannot compute regression. ' +
+          'This may occur with insufficient data points, perfectly collinear factors, ' +
+          'or constant factor values. Try using a longer time period or different ticker.'
+        );
+      }
+
       // Make all rows below this one 0 in current column
       for (let k = i + 1; k < n; k++) {
         const factor = augmented[k][i] / augmented[i][i];
@@ -279,6 +279,16 @@ class FamaFrenchRegression {
     // Back substitution
     for (let i = n - 1; i >= 0; i--) {
       const divisor = augmented[i][i];
+
+      // Check for zero divisor
+      if (Math.abs(divisor) < 1e-10) {
+        throw new Error(
+          'Singular matrix detected: Cannot compute regression. ' +
+          'This may occur with insufficient data points, perfectly collinear factors, ' +
+          'or constant factor values. Try using a longer time period or different ticker.'
+        );
+      }
+
       for (let j = 0; j < 2 * n; j++) {
         augmented[i][j] /= divisor;
       }

@@ -46,6 +46,10 @@ h3 {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.section + .section {
+    margin-top: 15px;
+}
+
 .input-group {
     margin-bottom: 12px;
 }
@@ -281,8 +285,8 @@ select:focus {
 
 /* Settings page */
 .settings-item {
-    margin-bottom: 20px;
-    padding-bottom: 20px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
     border-bottom: 1px solid #eee;
 }
 
@@ -469,12 +473,25 @@ select:focus {
     background-color: #e3f2fd;
     border-radius: 4px;
     border-left: 3px solid #2196F3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .model-stats p {
     margin: 4px 0;
     font-size: 12px;
     color: #333;
+}
+
+.model-stats button {
+    flex-shrink: 0;
+    flex-grow: 0;
+    padding: 8px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+    width: auto;
+    align-self: stretch;
 }
 
 .sig-legend {

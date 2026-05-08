@@ -72,6 +72,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Load current keyboard shortcut
     await updateKeyboardShortcut();
 
+    // Restore last results if available
+    await restoreLastResults();
+
     // Download FF data button (downloads all regions)
     downloadFFBtn.addEventListener('click', async function() {
         downloadFFBtn.disabled = true;
@@ -88,7 +91,6 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
 
             await updateCacheStatus();
-            alert(`✓ Downloaded factor data for all ${downloaded} regions!`);
 
         } catch (error) {
             console.error('Error downloading FF data:', error);
@@ -101,14 +103,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Clear cache button
     clearCacheBtn.addEventListener('click', async function() {
-        if (!confirm('Are you sure you want to clear the cache for all regions?')) {
-            return;
-        }
-
         await FFDataManager.clearCache();
         ffDataCache = {};
         await updateCacheStatus();
-        alert('Cache cleared for all regions');
     });
 
     // Open keyboard shortcuts page
@@ -189,26 +186,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 convertToUSD
             );
 
-            console.log('Prepared data:', preparedData);
-
             if (preparedData.dataPoints === 0) {
                 throw new Error('No matching data points found. The date ranges may not overlap.');
             }
-
-            // Debug: Check data quality
-            console.log('Excess returns sample:', preparedData.excessReturns.slice(0, 5));
-            console.log('Factors sample:', preparedData.factors.slice(0, 5));
-            console.log('Excess returns stats:', {
-                min: Math.min(...preparedData.excessReturns),
-                max: Math.max(...preparedData.excessReturns),
-                mean: preparedData.excessReturns.reduce((a,b) => a+b, 0) / preparedData.excessReturns.length
-            });
-
-            // Export data for Python comparison
-            console.log('=== DATA FOR PYTHON COMPARISON ===');
-            console.log('Dates:', JSON.stringify(preparedData.dates));
-            console.log('Excess Returns:', JSON.stringify(preparedData.excessReturns));
-            console.log('Factors:', JSON.stringify(preparedData.factors));
 
             // Run 5-factor regression
             const results = FamaFrenchRegression.fiveFactorRegression(
@@ -216,13 +196,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 preparedData.factors
             );
 
-            console.log('Regression results:', results);
-
             // Hide status and display results
             statusDiv.classList.remove('show');
 
             // Show results section
             document.getElementById('resultsSection').style.display = 'block';
+
+            // Save results for next popup open
+            await saveLastResults(preparedData.ticker, period, preparedData.dataPoints, preparedData.currencyNote, preparedData.region, regionSource, results);
 
             // Display results
             displayRegressionResults(preparedData.ticker, period, preparedData.dataPoints, preparedData.currencyNote, preparedData.region, regionSource, results);
@@ -346,9 +327,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         const statsHTML = `
             <div class="model-stats">
-                <p><strong>Model Statistics</strong></p>
-                <p>R²: ${(results.rSquared * 100).toFixed(2)}% | Adjusted R²: ${(results.adjustedRSquared * 100).toFixed(2)}%</p>
-                <p>Degrees of Freedom: ${results.degreesOfFreedom}</p>
+                <div>
+                    <p><strong>Model Statistics</strong></p>
+                    <p>R²: ${(results.rSquared * 100).toFixed(2)}% | Adjusted R²: ${(results.adjustedRSquared * 100).toFixed(2)}%</p>
+                    <p>Degrees of Freedom: ${results.degreesOfFreedom}</p>
+                </div>
+                <button id="copyResultsBtn" class="btn-secondary">Copy</button>
             </div>
         `;
 
@@ -361,8 +345,61 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         regressionResultsDiv.innerHTML = tableHTML + statsHTML + legendHTML;
 
+        // Attach copy button handler
+        document.getElementById('copyResultsBtn').addEventListener('click', () => {
+            copyResults(ticker, period, dataPoints, currencyNote, region, regionSource, results);
+        });
+
         // Display factor chart
         displayFactorChart(results);
+    }
+
+    async function copyResults(ticker, period, dataPoints, currencyNote, region, regionSource, results) {
+        try {
+            const regionName = FFDataManager.getRegionDisplayName(region);
+            const regionDisplay = regionSource === 'auto-detected' ? `${regionName} (auto)` : regionName;
+
+            // Build Markdown table
+            let markdown = `### Fama-French 5-Factor Regression: ${ticker}${currencyNote}\n\n`;
+            markdown += `**Region:** ${regionDisplay} | **Period:** ${period} | **Observations:** ${dataPoints}\n\n`;
+            markdown += `| Factor | Coefficient | t-Stat | p-Value | Sig |\n`;
+            markdown += `|--------|------------|--------|---------|-----|\n`;
+
+            const factors = [
+                { name: 'Alpha (α)', key: 'alpha' },
+                { name: 'Market (MKT-RF)', key: 'betaMKT' },
+                { name: 'Size (SMB)', key: 'betaSMB' },
+                { name: 'Value (HML)', key: 'betaHML' },
+                { name: 'Profitability (RMW)', key: 'betaRMW' },
+                { name: 'Investment (CMA)', key: 'betaCMA' }
+            ];
+
+            factors.forEach(factor => {
+                const coef = results[factor.key].toFixed(4);
+                const tStat = results.tStats[factor.key].toFixed(2);
+                const pVal = results.pValues[factor.key].toFixed(4);
+                const sig = results.significance[factor.key];
+                markdown += `| ${factor.name} | ${coef} | ${tStat} | ${pVal} | ${sig} |\n`;
+            });
+
+            markdown += `\n**Model Statistics**\n`;
+            markdown += `- R²: ${(results.rSquared * 100).toFixed(2)}%\n`;
+            markdown += `- Adjusted R²: ${(results.adjustedRSquared * 100).toFixed(2)}%\n`;
+
+            await navigator.clipboard.writeText(markdown);
+
+            // Show feedback
+            const btn = document.getElementById('copyResultsBtn');
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+
+        } catch (error) {
+            console.error('Error copying results:', error);
+            alert('Failed to copy results');
+        }
     }
 
     function displayFactorChart(results) {
@@ -433,5 +470,41 @@ document.addEventListener('DOMContentLoaded', async function() {
         `;
 
         chartContainer.innerHTML = chartHTML;
+    }
+
+    async function saveLastResults(ticker, period, dataPoints, currencyNote, region, regionSource, results) {
+        try {
+            await chrome.storage.local.set({
+                lastResults: {
+                    ticker,
+                    period,
+                    dataPoints,
+                    currencyNote,
+                    region,
+                    regionSource,
+                    results,
+                    timestamp: Date.now()
+                }
+            });
+        } catch (error) {
+            console.error('Error saving last results:', error);
+        }
+    }
+
+    async function restoreLastResults() {
+        try {
+            const stored = await chrome.storage.local.get('lastResults');
+            if (stored.lastResults) {
+                const { ticker, period, dataPoints, currencyNote, region, regionSource, results } = stored.lastResults;
+
+                // Show results section
+                document.getElementById('resultsSection').style.display = 'block';
+
+                // Display results
+                displayRegressionResults(ticker, period, dataPoints, currencyNote, region, regionSource, results);
+            }
+        } catch (error) {
+            console.error('Error restoring last results:', error);
+        }
     }
 });
